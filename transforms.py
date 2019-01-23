@@ -3,6 +3,8 @@ import numpy as np
 from scipy.ndimage.filters import gaussian_filter
 from skimage import img_as_float
 
+def original(image):
+    return image
 
 def _unsharp_mask_single_channel(image, radius, amount, vrange):
     """Single channel implementation of the unsharp masking filter."""
