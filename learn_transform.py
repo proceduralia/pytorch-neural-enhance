@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torchvision.utils import make_grid
 from tensorboardX import SummaryWriter
+import numpy as np
 import argparse
 from functools import partial
 import datetime
@@ -18,7 +19,7 @@ from models import MLP, NaiveCNN, LittleUnet
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=8, help='input batch size')
 parser.add_argument('--epochs', type=int, default=100, help='number of epochs to train for')
-parser.add_argument('--lr', type=float, default=0.01, help='learning rate')
+parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--cuda_idx', type=int, default=1, help='cuda device id')
 parser.add_argument('--outf', default='.', help='folder for model checkpoints')
@@ -27,12 +28,13 @@ parser.add_argument('--logdir', default='log', help='logdir for tensorboard')
 parser.add_argument('--run_tag', default='', help='tags for the current run')
 parser.add_argument('--checkpoint_every', default=10, help='number of epochs after which saving checkpoints')
 parser.add_argument('--model_type', default='unet', choices=['unet', 'cnn', 'mlp'], help='type of model to use')
+parser.add_argument('--initial_1by1', action="store_true", help='whether to use the initial 1 by 1 convs in unet')
 parser.add_argument('--transform', default='ad_hist_eq', choices=['hist_eq','ad_hist_eq','unsharp'], help='transformation to be learned')
 opt = parser.parse_args()
 
 #Create writer for tensorboard
 date = datetime.datetime.now().strftime("%d-%m-%y_%H:%M")
-run_name = f"{opt.run_tag}_{date}" if opt.run_tag != '' else date
+run_name = "{}_{}".format(opt.run_tag,date) if opt.run_tag != '' else date
 log_dir_name = os.path.join(opt.logdir, run_name)
 writer = SummaryWriter(log_dir_name)
 writer.add_text('Options', str(opt), 0)
@@ -47,7 +49,6 @@ torch.manual_seed(opt.manual_seed)
 if torch.cuda.is_available() and not opt.cuda:
 	print("You should run with CUDA.")
 device = torch.device("cuda:"+str(opt.cuda_idx) if opt.cuda else "cpu")
-print("Using", torch.cuda.get_device_name(device))
 
 transforms = {
     'hist_eq': equalize_hist,
@@ -63,7 +64,7 @@ test_loader = DataLoader(test_dataset, batch_size=opt.batch_size,
             shuffle=False, num_workers=2)
 
 if opt.model_type == 'unet':
-  model = LittleUnet()
+  model = LittleUnet(initial_1by1=opt.initial_1by1)
 if opt.model_type == 'cnn':
   model = NaiveCNN()
 if opt.model_type == 'mlp':
@@ -92,17 +93,20 @@ for epoch in range(opt.epochs):
     #Evaluate 
     writer.add_scalar('MSE Train', cumulative_loss / len(loader), epoch)
     model.eval()
-    #TODO compute loss and actual and estimate histograms on the test set 
     
     test_loss = []
     wass_dist = []
     for i, (im_o, im_t) in enumerate(test_loader): 
+      im_o, im_t = im_o.to(device), im_t.to(device)
       with torch.no_grad():
         output = model(im_o)
         test_loss.append(criterion(output, im_t).item())
         #TODO add wasserstein distance of histograms
+        actual_hists = np.array([np.histogram(im, bins=255, density=True)[0] for im in im_t.cpu().numpy()]) 
+        pred_hists = np.array([np.histogram(pred, bins=255, density=True)[0] for pred in output.cpu().numpy()])
+        wass_dist.append(np.mean([wasserstein_distance(i, j) for i,j in zip(actual_hists, pred_hists)]))
     writer.add_scalar('MSE Test', sum(test_loss)/len(test_loss), epoch)
-    #writer.add_scalar('Avg Wasserstein distance', sum(wass_dist)/len(wass_dist), epoch)
+    writer.add_scalar('Avg Wasserstein distance', sum(wass_dist)/len(wass_dist), epoch)
     
     #Make list of type [original1,estimated1,actual1,original2,estimated2,actual2]
     original, actual = test_dataset[:5]
@@ -112,5 +116,5 @@ for epoch in range(opt.epochs):
     images = [[o,e,a] for o,e,a in zip(original,estimated,actual)]
     images = torch.cat([i for k in images for i in k]).unsqueeze(1)
     #Make a grid, in each row, original|estimated|actual
-    grid = make_grid(images, nrow=len(images)//3, normalize=True)
+    grid = make_grid(images, nrow=len(images)//5, normalize=True)
     writer.add_image('Original|Estimated|Actual', grid, epoch)
