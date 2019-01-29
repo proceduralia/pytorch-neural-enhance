@@ -68,13 +68,22 @@ class LittleUnet(nn.Module):
     """A little U-net style CNN based on concatenations and transposed convolution
     Output in [-1,1]
     """
-    def __init__(self, imsize=32, n_channels=1):
+    def __init__(self, imsize=32, n_channels=1, initial_1by1=False):
         super().__init__()
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(n_channels, 32, kernel_size=3, stride=2),
-            nn.BatchNorm2d(32),
-            nn.ReLU()
-        )
+        if initial_1by1:
+            self.conv1 = nn.Sequential(
+                nn.Conv2d(n_channels, 255, kernel_size=1),
+                nn.Conv2d(255, 255, kernel_size=1),
+                nn.Conv2d(255, 32, kernel_size=3, stride=2),
+                nn.BatchNorm2d(32),
+                nn.ReLU()
+            )
+        else:
+            self.conv1 = nn.Sequential(
+                nn.Conv2d(n_channels, 32, kernel_size=3, stride=2),
+                nn.BatchNorm2d(32),
+                nn.ReLU()
+            )
         self.conv2 = nn.Sequential(
             nn.Conv2d(32, 64, kernel_size=3, stride=2),
             nn.BatchNorm2d(64),
@@ -121,6 +130,6 @@ if __name__ == "__main__":
     #Test naive cnn forward
     assert naive_cnn(im).size() == im.size()
     
-    unet = LittleUnet()
+    unet = LittleUnet(initial_1by1=True)
     #Test little unet forward
     assert unet(im).size() == im.size()
