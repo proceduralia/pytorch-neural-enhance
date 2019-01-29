@@ -16,11 +16,12 @@ parser.add_argument('--batch_size', type=int, default=8, help='input batch size'
 parser.add_argument('--epochs', type=int, default=100, help='number of epochs to train for')
 parser.add_argument('--lr', type=float, default=0.01, help='learning rate')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
+parser.add_argument('--cuda_idx', type=int, default=1, help='cuda device id')
 parser.add_argument('--outf', default='.', help='folder for model checkpoints')
 parser.add_argument('--manualSeed', type=int, help='manual seed')
 parser.add_argument('--logdir', default='log', help='logdir for tensorboard')
 parser.add_argument('--run_tag', default='', help='tags for the current run')
-parser.add_argument('--checkpoint_every', default=10, help='number of epochs after which saving checkpoints') 
+parser.add_argument('--checkpoint_every', default=10, help='number of epochs after which saving checkpoints')
 parser.add_argument('--model_type', default='unet', choices=['unet', 'cnn', 'mlp'], help='type of model to use')
 parser.add_argument('--transform', default='ad_hist_eq', choices=['hist_eq','ad_hist_eq','unsharp'], help='transformation to be learned')
 opt = parser.parse_args()
@@ -28,7 +29,7 @@ print(opt)
 
 if torch.cuda.is_available() and not opt.cuda:
 	print("You should run with CUDA.")
-device = torch.device("cuda:1" if opt.cuda else "cpu")
+device = torch.device("cuda:"+str(opt.cuda_idx) if opt.cuda else "cpu")
 print("Using", torch.cuda.get_device_name(device))
 
 transforms = {
@@ -59,7 +60,7 @@ for epoch in range(opt.epochs):
     for i, (im_o, im_t) in enumerate(loader):
         im_o, im_t = im_o.to(device), im_t.to(device)
         optimizer.zero_grad()
-	
+
         output = model(im_o)
         loss = criterion(output, im_t)
         loss.backward()
