@@ -29,6 +29,7 @@ parser.add_argument('--base_link', default='https://data.csail.mit.edu/graphics/
 parser.add_argument('--base_dir', default='fivek', help="Path of the base directory for the dataset")
 parser.add_argument('--size', default=500, help="Size for the greatest dimension of images")
 parser.add_argument('--limit_number', default=0, type=int, help="Limit the number of images to scrape. 0 -> no limit")
+parser.add_argument('--reverse', action='store_true',  help="Use reverse order for downloading the images")
 args = vars(parser.parse_args())
 
 #Parameters
@@ -38,6 +39,7 @@ or_dir = os.path.join(base_dir, 'original')
 expert_dirs = [os.path.join(base_dir, 'expert{}'.format(i)) for i in range(5)]
 size = args['size'] #maximum size for a dimension
 limit_number = args['limit_number']
+reverse = args['reverse']
 
 page = requests.get(base_link)
 tree = html.fromstring(page.content)
@@ -71,7 +73,14 @@ os.makedirs(or_dir, exist_ok=True)
 for expert_dir in expert_dirs:
     os.makedirs(expert_dir, exist_ok=True)
 
-for im_count, (original_link, expert_links) in enumerate(zip(original_links, expert_links)):
+idxs = range(len(original_links))
+if reverse:
+	print("Downloading in reverse order")
+	idxs = reversed(idxs)
+	original_links = reversed(original_links)
+	expert_links = reversed(expert_links)
+
+for im_count, (original_link, expert_link) in zip(idxs, zip(original_links, expert_links)):
     print("Processing original image {}...".format(im_count), end="\r")
     filename = os.path.join(or_dir, '{}.png'.format(im_count))
     
@@ -92,7 +101,7 @@ for im_count, (original_link, expert_links) in enumerate(zip(original_links, exp
         
     info_dataframe.at[im_count, 'original_path'] = filename 
         
-    for expert_count, link in enumerate(expert_links):
+    for expert_count, link in enumerate(expert_link):
         print("Processing image {} of expert {}...".format(im_count, expert_count), end="\r")
         filename = os.path.join(expert_dirs[expert_count], '{}.png'.format(im_count))
         
