@@ -73,7 +73,9 @@ class LittleUnet(nn.Module):
         if initial_1by1:
             self.conv1 = nn.Sequential(
                 nn.Conv2d(n_channels, 255, kernel_size=1),
+                nn.ReLU(),
                 nn.Conv2d(255, 255, kernel_size=1),
+                nn.ReLU(),
                 nn.Conv2d(255, 32, kernel_size=3, stride=2),
                 nn.BatchNorm2d(32),
                 nn.ReLU()
