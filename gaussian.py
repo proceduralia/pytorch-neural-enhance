@@ -64,7 +64,7 @@ class GaussianSmoothing(nn.Module):
                 'Only 1, 2 and 3 dimensions are supported. Received {}.'.format(dim)
             )
 
-    def forward(self, input):
+    def forward(self, x):
         """
         Apply gaussian filter to input.
         Arguments:
@@ -72,4 +72,5 @@ class GaussianSmoothing(nn.Module):
         Returns:
             filtered (torch.Tensor): Filtered output.
         """
-        return self.conv(input, weight=self.weight, groups=self.groups)
+        x = F.pad(x, (2, 2, 2, 2), mode='reflect')
+        return self.conv(x, weight=self.weight, groups=self.groups)
