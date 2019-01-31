@@ -10,6 +10,16 @@ def conv_out_shape(dims, conv):
     kernel_size, stride, pad, dilation = conv.kernel_size, conv.stride, conv.padding, conv.dilation
     return tuple(int(((dims[i] + (2 * pad[i]) - (dilation[i]*(kernel_size[i]-1))-1)/stride[i])+1) for i in range(len(dims)))
 
+class AdaptiveBatchNorm2d(nn.Module):
+    def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True):
+        super().__init__()
+        self.bn = nn.BatchNorm2d(num_features, eps, momentum, affine)
+        self.a = nn.Parameter(torch.FloatTensor(1, 1, 1, 1))
+        self.b = nn.Parameter(torch.FloatTensor(1, 1, 1, 1))
+
+    def forward(self, x):
+        return self.a * x + self.b * self.bn(x)
+
 class MLP(nn.Module):
     """
     A one-hidden-layer MLP.
@@ -33,6 +43,9 @@ class MLP(nn.Module):
         x = self.net(x)
         x = x.view(batch_size, n_channels, self.imsize, self.imsize)
         return x
+
+class CAN32(nn.Module):
+    pass
 
 class NaiveCNN(nn.Module):
     """
@@ -77,34 +90,34 @@ class LittleUnet(nn.Module):
                 nn.Conv2d(255, 255, kernel_size=1),
                 nn.ReLU(),
                 nn.Conv2d(255, 32, kernel_size=3, stride=2),
-                nn.BatchNorm2d(32),
+                AdaptiveBatchNorm2d(32),
                 nn.ReLU()
             )
         else:
             self.conv1 = nn.Sequential(
                 nn.Conv2d(n_channels, 32, kernel_size=3, stride=2),
-                nn.BatchNorm2d(32),
+                AdaptiveBatchNorm2d(32),
                 nn.ReLU()
             )
         self.conv2 = nn.Sequential(
             nn.Conv2d(32, 64, kernel_size=3, stride=2),
-            nn.BatchNorm2d(64),
+            AdaptiveBatchNorm2d(64),
             nn.ReLU(),
         )
         self.conv3 = nn.Sequential(
             nn.Conv2d(64, 128, kernel_size=3), 
-            nn.BatchNorm2d(128),
+            AdaptiveBatchNorm2d(128),
             nn.ReLU(),
         )
 
         self.conv_tran1 = nn.Sequential(
             nn.ConvTranspose2d(128, 64, kernel_size=3),
-            nn.BatchNorm2d(64),
+            AdaptiveBatchNorm2d(64),
             nn.ReLU()
         )
         self.conv_tran2 = nn.Sequential(
             nn.ConvTranspose2d(64*2, 32, kernel_size=3, stride=2),
-            nn.BatchNorm2d(32),
+            AdaptiveBatchNorm2d(32),
             nn.ReLU()
         )
         self.conv_tran3 = nn.Sequential(
