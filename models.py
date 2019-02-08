@@ -38,9 +38,10 @@ class MLP(nn.Module):
 
 class CAN(nn.Module):
     """Context Aggregation Network based on Table 3 of
-       "Fast Image Processing with Fully-Convolutiona Nets"
+       "Fast Image Processing with Fully-Convolutiona Nets".
+       In the original paper: n_channels=32, n_middle_blocks=7
     """
-    def __init__(self, n_channels=32):
+    def __init__(self, n_channels=32, n_middle_blocks=5):
         super().__init__()
         self.first_block = nn.Sequential(
             nn.Conv2d(3, n_channels, kernel_size=3, padding=same_padding(3, 1)),
@@ -50,7 +51,7 @@ class CAN(nn.Module):
         
         #Layers from 2 to 8
         blocks = []
-        for i in range(1, 8):
+        for i in range(1, n_middle_blocks+1):
             d = 2**1
             blocks.append(nn.Sequential( 
                 nn.Conv2d(n_channels, n_channels, kernel_size=3, dilation=d, padding=same_padding(3, d)),
