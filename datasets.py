@@ -84,6 +84,7 @@ class FivekDataset(Dataset):
       self.expert_path = os.path.join(base_path, 'expert'+str(expert_idx))
       
       self.len = len(os.listdir(self.original_path))
+      #TODO inefficient... Just save this data in the csv
       original_shapes = []
       for i in range(self.len):
         original_shapes.append(Image.open(os.path.join(self.original_path, "{}.png".format(i))).size)
