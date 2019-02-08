@@ -1,42 +1,6 @@
 import torch
 import torch.nn as nn
-
-def conv_out_shape(dims, conv):
-    """Computes the output shape for given convolution module
-    Args:
-        dims (tuples): a tuple of kind (w, h)
-        conv (module): a pytorch convolutional module
-    """
-    kernel_size, stride, pad, dilation = conv.kernel_size, conv.stride, conv.padding, conv.dilation
-    return tuple(int(((dims[i] + (2 * pad[i]) - (dilation[i]*(kernel_size[i]-1))-1)/stride[i])+1) for i in range(len(dims)))
-
-def general_same_padding(i, k, d=1, s=1, dims=2):
-    """Compute the padding to obtain the same output shape when using convolution
-    Args: 
-      - input_size, kernel_size, dilation, stride (tuple or ints)
-      - dims (int): number of dimensions for the padding
-    """
-    #Convert i, k and d to tuples if they are int
-    i = tuple([i for j in range(dims)]) if type(i) == int else i
-    k = tuple([k for j in range(dims)]) if type(k) == int else k
-    d = tuple([d for j in range(dims)]) if type(d) == int else d
-    s = tuple([s for j in range(dims)]) if type(s) == int else s
-    
-    return tuple([int(0.5*(d[j]*(k[j]-1)-(1-i[j])*(s[j]-1))) for j in range(dims)])
-
-def same_padding(k, d=1, dims=2):
-    """Compute the padding to obtain the same output shape when using convolution,
-       considering the case when the stride is unitary
-    Args: 
-      - input_size, kernel_size, dilation, stride (tuple or ints)
-      - dims (int): number of dimensions for the padding
-    """
-    #Convert i, k and d to tuples if they are int
-    k = tuple([k for j in range(dims)]) if type(k) == int else k
-    d = tuple([d for j in range(dims)]) if type(d) == int else d
-    
-    return tuple([int(0.5*(d[j]*(k[j]-1))) for j in range(dims)])
-
+from torch_utils import conv_out_shape, same_padding
 
 class AdaptiveBatchNorm2d(nn.Module):
     def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True):
