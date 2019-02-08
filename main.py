@@ -104,9 +104,10 @@ for epoch in range(opt.epochs):
     writer.add_scalar('MSE Train', cumulative_loss / len(loader), epoch)
     #Checkpointing
     if epoch % opt.checkpoint_every == 0:
-        torch.save(model.state_dict(), "{}_epoch{}.pt".format(opt.run_tag, epoch) 
-    model.eval()
+        torch.save(model.state_dict(), "{}_epoch{}.pt".format(opt.run_tag, epoch))
     
+    #Model evaluation
+    model.eval() 
     test_loss = []
     wass_dist = []
     for i, (im_o, im_t) in enumerate(test_loader): 
