@@ -16,7 +16,7 @@ from torch_utils import JoinedDataLoader
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=8, help='input batch size')
 parser.add_argument('--epochs', type=int, default=100, help='number of epochs to train for')
-parser.add_argument('--lr', type=float, default=0.002, help='learning rate')
+parser.add_argument('--lr', type=float, default=0.0002, help='learning rate')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--cuda_idx', type=int, default=1, help='cuda device id')
 parser.add_argument('--outf', default='.', help='folder for model checkpoints')
@@ -49,12 +49,12 @@ if torch.cuda.is_available() and not opt.cuda:
 	print("You should run with CUDA.")
 device = torch.device("cuda:"+str(opt.cuda_idx) if opt.cuda else "cpu")
 
-landscape_transform = transforms.Compose([transforms.RandomHorizontalFlip(),
+landscape_transform = transforms.Compose([
                               transforms.Resize((332, 500)),
                               transforms.ToTensor(),
                               transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) #normalize in [-1,1]
                              ])
-portrait_transform = transforms.Compose([transforms.RandomHorizontalFlip(),
+portrait_transform = transforms.Compose([
                               transforms.Resize((500, 332)),
                               transforms.ToTensor(),
                               transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) #normalize in [-1,1]
@@ -114,13 +114,14 @@ for epoch in range(opt.epochs):
     #Model evaluation
     model.eval() 
     test_loss = []
-    wass_dist = []
     for i, (im_o, im_t) in enumerate(test_loader): 
       im_o, im_t = im_o.to(device), im_t.to(device)
       with torch.no_grad():
         output = model(im_o)
         test_loss.append(criterion(output, im_t).item())
-    writer.add_scalar('MSE Test', sum(test_loss)/len(test_loss), epoch)
+    #FIXME test_loss is full of nans idky
+    avg_loss = 20000 if not sum(test_loss) else sum(test_loss)/len(test_loss)
+    writer.add_scalar('MSE Test', avg_loss, epoch)
     
     for idx in test_idxs:
       original, actual = test_landscape_dataset[idx]
