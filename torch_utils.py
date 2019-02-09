@@ -6,6 +6,8 @@ class JoinedDataLoader:
     Useful in case you can't join samples of different datasets in a single batch.
     """
     def __init__(self, loaderA, loaderB):
+        self.loaderA = loaderA
+        self.loaderB = loaderB
         self.probA = len(loaderA)/(len(loaderA)+len(loaderB))
         self.loaderAiter, self.loaderBiter = iter(loaderA), iter(loaderB)
     
@@ -20,7 +22,8 @@ class JoinedDataLoader:
             except StopIteration:
                 try:
                     n = next(self.loaderBiter)
-                except:
+                except StopIteration:
+                    self._reset_iterators()
                     raise StopIteration
         else:
             try:
@@ -28,10 +31,14 @@ class JoinedDataLoader:
             except StopIteration:
                 try:
                     n = next(self.loaderAiter)
-                except:
+                except StopIteration:
+                    self._reset_iterators()
                     raise StopIteration
         return n
-                
+
+    def _reset_iterators(self):
+        self.loaderAiter, self.loaderBiter = iter(self.loaderA), iter(self.loaderB)
+        
     def __len__(self):
         return len(self.loaderAiter) + len(self.loaderBiter) 
 

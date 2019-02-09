@@ -16,10 +16,9 @@ from torch_utils import JoinedDataLoader
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=8, help='input batch size')
 parser.add_argument('--epochs', type=int, default=100, help='number of epochs to train for')
-parser.add_argument('--lr', type=float, default=0.0002, help='learning rate')
+parser.add_argument('--lr', type=float, default=2e-4, help='learning rate')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--cuda_idx', type=int, default=1, help='cuda device id')
-parser.add_argument('--outf', default='.', help='folder for model checkpoints')
 parser.add_argument('--manual_seed', type=int, help='manual seed')
 parser.add_argument('--logdir', default='log', help='logdir for tensorboard')
 parser.add_argument('--run_tag', default='', help='tags for the current run')
@@ -71,14 +70,14 @@ train_size = int(0.8 * len(portrait_dataset))
 test_size = len(portrait_dataset) - train_size
 train_portrait_dataset, test_portrait_dataset = random_split(portrait_dataset, [train_size, test_size])
 
-train_loader = JoinedDataLoader(
-               DataLoader(train_landscape_dataset, batch_size=opt.batch_size, shuffle=True, num_workers=2),
-               DataLoader(train_portrait_dataset, batch_size=opt.batch_size, shuffle=True, num_workers=2)
-               )
-test_loader = JoinedDataLoader(
-               DataLoader(test_landscape_dataset, batch_size=opt.batch_size, shuffle=True, num_workers=2),
-               DataLoader(test_portrait_dataset, batch_size=opt.batch_size, shuffle=True, num_workers=2)
-               )
+train_landscape_loader = DataLoader(train_landscape_dataset, batch_size=opt.batch_size, shuffle=True, num_workers=2)
+train_portrait_loader = DataLoader(train_portrait_dataset, batch_size=opt.batch_size, shuffle=True, num_workers=2)
+train_loader = JoinedDataLoader(train_landscape_loader, train_portrait_loader)
+
+test_landscape_loader = DataLoader(test_landscape_dataset, batch_size=opt.batch_size, shuffle=True, num_workers=2)
+test_portrait_loader = DataLoader(test_portrait_dataset, batch_size=opt.batch_size, shuffle=True, num_workers=2)
+test_loader = JoinedDataLoader(test_landscape_loader, test_portrait_loader)
+
 
 if opt.model_type == 'can32':
   model = CAN(n_channels=32)
@@ -101,7 +100,6 @@ for epoch in range(opt.epochs):
         loss = criterion(output, im_t)
         loss.backward()
         optimizer.step()
-
         cumulative_loss += loss.item()
         print('[Epoch %d, Batch %2d] loss: %.3f' %
          (epoch + 1, i + 1, cumulative_loss / (i+1)), end="\r")
@@ -119,8 +117,7 @@ for epoch in range(opt.epochs):
       with torch.no_grad():
         output = model(im_o)
         test_loss.append(criterion(output, im_t).item())
-    #FIXME test_loss is full of nans idky
-    avg_loss = 20000 if not sum(test_loss) else sum(test_loss)/len(test_loss)
+    avg_loss = sum(test_loss)/len(test_loss)
     writer.add_scalar('MSE Test', avg_loss, epoch)
     
     for idx in test_idxs:
