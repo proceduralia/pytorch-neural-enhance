@@ -95,7 +95,7 @@ class CAN(nn.Module):
         #Layers from 2 to 8
         blocks = []
         for i in range(1, n_middle_blocks+1):
-            d = 2**1
+            d = 2**i
             blocks.append(nn.Sequential( 
                 nn.Conv2d(n_channels, n_channels, kernel_size=3, dilation=d, padding=same_padding(3, d)),
                 AdaptiveBatchNorm2d(n_channels),
@@ -115,6 +115,47 @@ class CAN(nn.Module):
         x = self.middle_blocks(x)
         x = self.last_blocks(x)
         return x
+
+class ConditionalCAN(nn.Module):
+    """Context Aggregation Network that can be conditioned by multiple categorical classes.
+    Conditioning is done by conditional batch normalization based on 
+    
+    Expected input: (image, (class_idx1,class_idx2,...)).
+    """
+    def __init__(self, nums_classes, n_channels=32, n_middle_blocks=5, embedding_dim=32):
+        super().__init__()
+        self.first_block = nn.Sequential(
+            nn.Conv2d(3, n_channels, kernel_size=3, padding=same_padding(3, 1)),
+            AdaptiveBatchNorm2d(n_channels),
+            nn.LeakyReLU(0.2),
+        )
+        
+        #Layers from 2 to 8
+        self.middle_convs = nn.ModuleList([
+            nn.Conv2d(n_channels, n_channels, kernel_size=3, dilation=2**i, padding=same_padding(3, 2**i))
+            for i in range(1, n_middle_blocks+1)
+        ])
+        self.middle_cbns = nn.ModuleList([
+            MultipleConditionalBatchNorm2d(n_channels, nums_classes, hidden_dim=embedding_dim)
+            for i in range(1, n_middle_blocks+1)
+        ])
+
+        self.last_blocks = nn.Sequential(
+            nn.Conv2d(n_channels, n_channels, kernel_size=3, padding=same_padding(3, 1)),
+            AdaptiveBatchNorm2d(n_channels),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(n_channels, 3, kernel_size=1)
+        )
+
+    def forward(self, x, class_idxs):
+        x = self.first_block(x)
+        for conv, cbn in zip(self.middle_convs, self.middle_cbns):
+            x = conv(x)
+            x = cbn(x, class_idxs)
+            x = nn.functional.leaky_relu(x, 0.2)
+        x = self.last_blocks(x)
+        return x
+
 
 class UNet(nn.Module):
     #TODO
@@ -216,9 +257,8 @@ class LittleUnet(nn.Module):
 
 
 class VGG(nn.Module):
-
     def __init__(self):
-        super(VGG, self).__init__()
+        super().__init__()
         self.model = vgg16_bn(True).features
         self.mean = torch.Tensor([123.68,  116.779,  103.939]).view(1,3,1,1)
         for param in self.model.parameters():
@@ -251,7 +291,12 @@ if __name__ == "__main__":
     #Test can32 forward
     assert can32(im).size() == im.size()
     
-    cbn = MultipleConditionalBatchNorm2d(n_channels=3, nums_classes=(6, 3, 3, 4), hidden_dim=32)
-    assert cbn(im, (torch.LongTensor([1]), torch.LongTensor([0]), torch.LongTensor([0]), torch.LongTensor([1]))).size() == im.size()
+    class_idxs = (torch.LongTensor([1]), torch.LongTensor([0]), torch.LongTensor([0]), torch.LongTensor([1]))
+    nums_classes = (6, 3, 3, 4)
+    cbn = MultipleConditionalBatchNorm2d(n_channels=3, nums_classes=nums_classes, hidden_dim=32)
+    assert cbn(im, class_idxs).size() == im.size()
+    
+    c_can32 = ConditionalCAN(nums_classes)
+    assert c_can32(im, class_idxs).size() == im.size()
 
     print("Tests run correctly!")

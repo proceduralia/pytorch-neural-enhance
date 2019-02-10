@@ -2,6 +2,7 @@ from tensorboardX import SummaryWriter
 from torch.utils.data import Dataset
 import torch
 import numpy as np
+from sklearn.preprocessing import LabelEncoder
 import os
 import torchvision
 import torchvision.transforms as transforms
@@ -65,17 +66,26 @@ class TransformedCifarDataset(Dataset):
         return len(self.original_data)
         
 class FivekDataset(Dataset):
-    def __init__(self, base_path, expert_idx=2, transform=None, filter_ratio=None):
+    def __init__(self, base_path, expert_idx=2, transform=None, filter_ratio=None, use_features=False):
       """Fivek dataset class.
       Args:
         - base_path (str): base path with the directories
         - expert_idx (int): index of the ground truth expert
         - transform (torchvision transform): to be applied to both original and improved images
         - filter_ratio (str): "landscape" or "portrait" filter
+        - use_features (bool): whether to use the (subject, light, location, time) features or not
       """
       self.base_path = base_path
       self.expert_idx = expert_idx
-      self.csv_file = pd.read_csv(os.path.join(base_path, 'mitdatainfo.csv'))
+      self.use_features = use_features
+      if use_features:
+        self.info_df = pd.read_csv(os.path.join(base_path, 'mitdatainfo.csv'))
+        self.features = ["subject", "light", "location", "time"]
+        self.encoders = {}
+        for feature_name in self.features:
+          self.encoders[feature_name] = LabelEncoder().fit(self.info_df[feature_name])
+        self.encoded_features = torch.LongTensor(np.vstack([self.encoders[feat].transform(self.info_df[feat]) for feat in self.features]).T)
+  
       self.transform = transform
       if filter_ratio:
         assert filter_ratio in ["landscape", "portrait"]
@@ -103,8 +113,13 @@ class FivekDataset(Dataset):
       if self.transform:
         original_im = self.transform(original_im)
         expert_im = self.transform(expert_im)
-
-      return original_im, expert_im
+      if self.use_features:
+        #Retrieve features from dataframe and transform them
+        feats = self.encoded_features[idx]
+        #Create tuple of tensors
+        return original_im, expert_im, tuple([tens for tens in feats])
+      else:  
+        return original_im, expert_im
 
     def __len__(self):
       if self.filter_ratio == "landscape":
@@ -115,10 +130,6 @@ class FivekDataset(Dataset):
         return self.len
 
 if __name__ == "__main__":
-    dataset = FivekDataset(base_path="/home/iacv3_1/fivek")
-    original_im, expert_im = dataset[0]
-    print(transforms.ToTensor()(original_im))
-    #writer = SummaryWriter('log/test_log')
-    #writer.add_image("Ims", transforms.ToTensor()(original_im), 0)
-    #writer.add_text("Prova2", "ciao", 0)
-    #writer.add_image("Image", transforms.ToTensor()(expert_im), 1)
+    dataset = FivekDataset(base_path="/home/iacv3_1/fivek", use_features=True)
+    original_im, expert_im, feats = dataset[0]
+    print(original_im.size, expert_im.size, feats)
