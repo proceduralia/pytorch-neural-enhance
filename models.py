@@ -21,30 +21,6 @@ class ConditionalBatchNorm2d(nn.Module):
         out = gamma.view(-1, self.n_channels, 1, 1) * out + beta.view(-1, self.n_channels, 1, 1)
         return out
 
-class MultipleConditionalBatchNorm2d(nn.Module):
-    """Conditional BatchNorm to be used in the case of multiple categorical input features.
-    Args:
-      - n_channels (int): number of feature maps of the convolutional layer to be conditioned
-      - num_classes (iterable of ints): list of the number of classes for the different feature embeddings
-    """
-    def __init__(self, n_channels, nums_classes, hidden_dim=32):
-        super().__init__()
-        self.n_channels = n_channels
-        self.nums_classes = nums_classes
-        #BatchNorm with affine=False is just normalization without params
-        self.bn = nn.BatchNorm2d(n_channels, affine=False)
-        #An embedding for each different categorical feature
-        self.embeddings = nn.ModuleList([nn.Embedding(num_classes, hidden_dim) for num_classes in nums_classes])
-        self.linear = nn.Linear(len(nums_classes) * hidden_dim, n_channels * 2)
-
-    def forward(self, x, class_idxs):
-        out = self.bn(x)
-        concatenated_embeddings = [self.embeddings[i](class_idxs[i]) for i in range(len(class_idxs))]
-        concatenated_embeddings = torch.cat(concatenated_embeddings, dim=1)
-        gamma, beta = self.linear(concatenated_embeddings).chunk(2, 1)
-        out = gamma.view(-1, self.n_channels, 1, 1) * out + beta.view(-1, self.n_channels, 1, 1)
-        return out
-
 class AdaptiveBatchNorm2d(nn.Module):
     def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True):
         super().__init__()
@@ -54,6 +30,43 @@ class AdaptiveBatchNorm2d(nn.Module):
 
     def forward(self, x):
         return self.a * x + self.b * self.bn(x)
+
+class MultipleConditionalBatchNorm2d(nn.Module):
+    """Conditional BatchNorm to be used in the case of multiple categorical input features.
+    Args:
+      - n_channels (int): number of feature maps of the convolutional layer to be conditioned
+      - num_classes (iterable of ints): list of the number of classes for the different feature embeddings
+      - adaptive (bool): use adaptive batchnorm instead of standadrd batchnorm
+    """
+    def __init__(self, n_channels, nums_classes, adaptive=True):
+        super().__init__()
+        self.n_channels = n_channels
+        self.nums_classes = nums_classes
+        #use embedding dim such that the total size is n_channels
+        embedding_dims = [n_channels//len(nums_classes) for i in range(len(nums_classes)-1)]
+        embedding_dims.append((n_channels//len(nums_classes)) + (n_channels % len(nums_classes)))
+        embedding_dims = [dim*2 for dim in embedding_dims]
+
+        #BatchNorm with affine=False is just normalization without params
+        self.bn = AdaptiveBatchNorm2d(n_channels, affine=False) if adaptive else nn.BatchNorm2d(n_channels, affine=False)
+        #An embedding for each different categorical feature
+        self.embeddings = nn.ModuleList([nn.Embedding(num_classes, dim) for num_classes, dim in zip(nums_classes, embedding_dims)])
+
+        #Initialize embeddings
+        for emb in self.embeddings:
+          #First half of embedding is for gamma (scale parameter)
+          emb.weight.data[:, :n_channels].normal_(1, 0.02)
+          #Second half of the embedding is for beta (bias parameter)
+          emb.weight.data[:, n_channels:].zero_()
+
+    def forward(self, x, class_idxs):
+        out = self.bn(x)
+        concatenated_embeddings = [emb(idx) for emb, idx in zip(self.embeddings, class_idxs)]
+        concatenated_embeddings = torch.cat(concatenated_embeddings, dim=1)
+        gamma, beta = concatenated_embeddings.chunk(2, 1)
+        out = gamma.view(-1, self.n_channels, 1, 1) * out + beta.view(-1, self.n_channels, 1, 1)
+        return out
+
 
 class MLP(nn.Module):
     """
@@ -122,7 +135,7 @@ class ConditionalCAN(nn.Module):
     
     Expected input: (image, (class_idx1,class_idx2,...)).
     """
-    def __init__(self, nums_classes, n_channels=32, n_middle_blocks=5, embedding_dim=32):
+    def __init__(self, nums_classes, n_channels=32, n_middle_blocks=5):
         super().__init__()
         self.first_block = nn.Sequential(
             nn.Conv2d(3, n_channels, kernel_size=3, padding=same_padding(3, 1)),
@@ -136,7 +149,7 @@ class ConditionalCAN(nn.Module):
             for i in range(1, n_middle_blocks+1)
         ])
         self.middle_cbns = nn.ModuleList([
-            MultipleConditionalBatchNorm2d(n_channels, nums_classes, hidden_dim=embedding_dim)
+            MultipleConditionalBatchNorm2d(n_channels, nums_classes)
             for i in range(1, n_middle_blocks+1)
         ])
 
@@ -292,10 +305,11 @@ if __name__ == "__main__":
     #Test can32 forward
     assert can32(im).size() == im.size()
     
+    feat = torch.randn(8, 32, 60, 80)
     class_idxs = (torch.LongTensor([1]), torch.LongTensor([0]), torch.LongTensor([0]), torch.LongTensor([1]))
     nums_classes = (6, 3, 3, 4)
-    cbn = MultipleConditionalBatchNorm2d(n_channels=3, nums_classes=nums_classes, hidden_dim=32)
-    assert cbn(im, class_idxs).size() == im.size()
+    cbn = MultipleConditionalBatchNorm2d(n_channels=32, nums_classes=nums_classes)
+    assert cbn(feat, class_idxs).size() == feat.size()
     
     c_can32 = ConditionalCAN(nums_classes)
     assert c_can32(im, class_idxs).size() == im.size()
