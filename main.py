@@ -99,6 +99,7 @@ test_idxs = random.sample(range(len(test_landscape_dataset)), 3)
 for epoch in range(opt.epochs):
     model.train()
     cumulative_loss = 0.0
+
     for i, vals in enumerate(train_loader):
       optimizer.zero_grad()
       if opt.model_type == 'conditional_can32':
@@ -110,7 +111,6 @@ for epoch in range(opt.epochs):
         im_o, im_t = vals
         im_o, im_t = im_o.to(device), im_t.to(device)
         output = model(im_o)
-
       loss = criterion(output, im_t)
       loss.backward()
       optimizer.step()
@@ -121,32 +121,43 @@ for epoch in range(opt.epochs):
     writer.add_scalar('MSE Train', cumulative_loss / len(train_loader), epoch)
     #Checkpointing
     if epoch % opt.checkpoint_every == 0:
-        torch.save(model.state_dict(), os.path.join(opt.checkpoint_dir, "{}_epoch{}.pt".format(opt.run_tag, epoch+1)))
+      torch.save(model.state_dict(), os.path.join(opt.checkpoint_dir, "{}_epoch{}.pt".format(opt.run_tag, epoch+1)))
     
+
     #Model evaluation
     model.eval() 
     test_loss = []
+
     for i, vals in enumerate(test_loader): 
       if opt.model_type == 'conditional_can32':
         im_o, im_t, feats = vals
         im_o, im_t = im_o.to(device), im_t.to(device)
         feats = tuple([feat.to(device) for feat in feats])
-        output = model(im_o, feats)
+        with torch.no_grad():
+          output = model(im_o, feats)
+          test_loss.append(criterion(output, im_t).item())
       else:
         im_o, im_t = vals
         im_o, im_t = im_o.to(device), im_t.to(device)
-        output = model(im_o)
+        with torch.no_grad():
+          output = model(im_o)
+          test_loss.append(criterion(output, im_t).item())
 
-      with torch.no_grad():
-        output = model(im_o)
-        test_loss.append(criterion(output, im_t).item())
     avg_loss = sum(test_loss)/len(test_loss)
     writer.add_scalar('MSE Test', avg_loss, epoch)
     
     for idx in test_idxs:
-      original, actual = test_landscape_dataset[idx]
-      original, actual = original.unsqueeze(0).to(device), actual.unsqueeze(0).to(device)
-      estimated = model(original)
+      if opt.model_type == 'conditional_can32':
+        original, actual, feats = test_landscape_dataset[idx]
+        original, actual = original.unsqueeze(0).to(device), actual.unsqueeze(0).to(device)
+        feats = tuple([feat.unsqueeze(0).to(device) for feat in feats])
+        with torch.no_grad():
+          estimated = model(original, feats)
+      else:
+        original, actual = test_landscape_dataset[idx]
+        original, actual = original.unsqueeze(0).to(device), actual.unsqueeze(0).to(device)
+        with torch.no_grad():
+          estimated = model(original)
       images = torch.cat((original, estimated, actual))
       grid = make_grid(images, nrow=1, normalize=True)
       writer.add_image('{}:Original|Estimated|Actual'.format(idx), grid, epoch)

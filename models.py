@@ -257,10 +257,11 @@ class LittleUnet(nn.Module):
 
 
 class VGG(nn.Module):
-    def __init__(self):
+    def __init__(self,device):
         super().__init__()
         self.model = vgg16_bn(True).features
         self.mean = torch.Tensor([123.68,  116.779,  103.939]).view(1,3,1,1)
+        self.mean = self.mean.to(device)
         for param in self.model.parameters():
             param.requires_grad = False
 
