@@ -10,11 +10,13 @@ import datetime
 import os
 import random
 from datasets import FivekDataset
-from models import CAN, ConditionalCAN
+from models import CAN, ConditionalCAN, VGG
 from torch_utils import JoinedDataLoader
+from loss import ColorContentLoss
+from gaussian import GaussianSmoothing
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--batch_size', type=int, default=8, help='input batch size')
+parser.add_argument('--batch_size', type=int, default=16, help='input batch size')
 parser.add_argument('--epochs', type=int, default=100, help='number of epochs to train for')
 parser.add_argument('--lr', type=float, default=2e-5, help='learning rate')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
@@ -25,7 +27,7 @@ parser.add_argument('--run_tag', default='', help='tags for the current run')
 parser.add_argument('--checkpoint_every', default=10, help='number of epochs after which saving checkpoints')
 parser.add_argument('--checkpoint_dir', default="checkpoints", help='ibase directory for the checkpoints')
 parser.add_argument('--model_type', default='can32', choices=['can32', 'conditional_can32'], help='type of model to use')
-parser.add_argument('--loss', default='mae', choices=['mse', 'mae'], help='type of loss to use')
+parser.add_argument('--loss', default='mae', choices=['mse', 'mae','ccl'], help='type of loss to use')
 parser.add_argument('--data_path', default='/home/iacv3_1/fivek', help='path of the base directory of the dataset')
 opt = parser.parse_args()
 
@@ -96,6 +98,8 @@ if opt.loss == "mse":
   criterion = nn.MSELoss()
 if opt.loss == "mae":
   criterion = nn.L1Loss()
+if opt.loss == "ccl":
+  criterion = ColorContentLoss(VGG(device),GaussianSmoothing(3,10,5))
 assert criterion
 criterion = criterion.to(device)
 optimizer = optim.Adam(model.parameters(), lr=opt.lr)
