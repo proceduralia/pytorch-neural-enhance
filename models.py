@@ -24,7 +24,7 @@ class ConditionalBatchNorm2d(nn.Module):
 
 class AdaptiveBatchNorm2d(nn.Module):
     def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True):
-        super().__init__()
+        super(AdaptiveBatchNorm2d,self).__init__()
         self.bn = nn.BatchNorm2d(num_features, eps, momentum, affine)
         self.a = nn.Parameter(torch.FloatTensor(1, 1, 1, 1))
         self.b = nn.Parameter(torch.FloatTensor(1, 1, 1, 1))
@@ -39,7 +39,7 @@ class MultipleConditionalBatchNorm2d(nn.Module):
       - num_classes (iterable of ints): list of the number of classes for the different feature embeddings
       - adaptive (bool): use adaptive batchnorm instead of standadrd batchnorm
     """
-    def __init__(self, n_channels, nums_classes, adaptive=True):
+    def __init__(self, n_channels, nums_classes, adaptive=False):
         super().__init__()
         self.n_channels = n_channels
         self.nums_classes = nums_classes
@@ -97,14 +97,15 @@ class MLP(nn.Module):
 
 class CAN(nn.Module):
     """Context Aggregation Network based on Table 3 of
-       "Fast Image Processing with Fully-Convolutiona Nets".
+       "Fast Image Processing with Fully-Convolutional Nets".
        In the original paper: n_channels=32, n_middle_blocks=7
     """
-    def __init__(self, n_channels=32, n_middle_blocks=5):
+    def __init__(self, n_channels=32, n_middle_blocks=5, adaptive=False):
         super().__init__()
+        self.bn = AdaptiveBatchNorm2d if adaptive else nn.BatchNorm2d
         self.first_block = nn.Sequential(
             nn.Conv2d(3, n_channels, kernel_size=3, padding=same_padding(3, 1)),
-            AdaptiveBatchNorm2d(n_channels),
+            self.bn(n_channels),
             nn.LeakyReLU(0.2),
         )
         
@@ -114,14 +115,14 @@ class CAN(nn.Module):
             d = 2**i
             blocks.append(nn.Sequential( 
                 nn.Conv2d(n_channels, n_channels, kernel_size=3, dilation=d, padding=same_padding(3, d)),
-                AdaptiveBatchNorm2d(n_channels),
+                self.bn(n_channels),
                 nn.LeakyReLU(0.2)
             ))
         self.middle_blocks = nn.Sequential(*blocks)
 
         self.last_blocks = nn.Sequential(
             nn.Conv2d(n_channels, n_channels, kernel_size=3, padding=same_padding(3, 1)),
-            AdaptiveBatchNorm2d(n_channels),
+            self.bn(n_channels),
             nn.LeakyReLU(0.2),
             nn.Conv2d(n_channels, 3, kernel_size=1)
         )
@@ -138,11 +139,12 @@ class ConditionalCAN(nn.Module):
     
     Expected input: (image, (class_idx1,class_idx2,...)).
     """
-    def __init__(self, nums_classes, n_channels=32, n_middle_blocks=5):
+    def __init__(self, nums_classes, n_channels=32, n_middle_blocks=5, adaptive=False):
         super().__init__()
+        self.bn = AdaptiveBatchNorm2d if adaptive else nn.BatchNorm2d
         self.first_block = nn.Sequential(
             nn.Conv2d(3, n_channels, kernel_size=3, padding=same_padding(3, 1)),
-            AdaptiveBatchNorm2d(n_channels),
+            self.bn(n_channels),
             nn.LeakyReLU(0.2),
         )
         
@@ -152,13 +154,13 @@ class ConditionalCAN(nn.Module):
             for i in range(1, n_middle_blocks+1)
         ])
         self.middle_cbns = nn.ModuleList([
-            MultipleConditionalBatchNorm2d(n_channels, nums_classes)
+            MultipleConditionalBatchNorm2d(n_channels, nums_classes, adaptive=adaptive)
             for i in range(1, n_middle_blocks+1)
         ])
 
         self.last_blocks = nn.Sequential(
             nn.Conv2d(n_channels, n_channels, kernel_size=3, padding=same_padding(3, 1)),
-            AdaptiveBatchNorm2d(n_channels),
+            self.bn(n_channels),
             nn.LeakyReLU(0.2),
             nn.Conv2d(n_channels, 3, kernel_size=1)
         )
@@ -227,34 +229,34 @@ class LittleUnet(nn.Module):
                 nn.Conv2d(255, 255, kernel_size=1),
                 nn.ReLU(),
                 nn.Conv2d(255, 32, kernel_size=3, stride=2),
-                AdaptiveBatchNorm2d(32),
+                nn.BatchNorm2d(32),
                 nn.ReLU()
             )
         else:
             self.conv1 = nn.Sequential(
                 nn.Conv2d(n_channels, 32, kernel_size=3, stride=2),
-                AdaptiveBatchNorm2d(32),
+                nn.BatchNorm2d(32),
                 nn.ReLU()
             )
         self.conv2 = nn.Sequential(
             nn.Conv2d(32, 64, kernel_size=3, stride=2),
-            AdaptiveBatchNorm2d(64),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
         )
         self.conv3 = nn.Sequential(
             nn.Conv2d(64, 128, kernel_size=3), 
-            AdaptiveBatchNorm2d(128),
+            nn.BatchNorm2d(128),
             nn.ReLU(),
         )
 
         self.conv_tran1 = nn.Sequential(
             nn.ConvTranspose2d(128, 64, kernel_size=3),
-            AdaptiveBatchNorm2d(64),
+            nn.BatchNorm2d(64),
             nn.ReLU()
         )
         self.conv_tran2 = nn.Sequential(
             nn.ConvTranspose2d(64*2, 32, kernel_size=3, stride=2),
-            AdaptiveBatchNorm2d(32),
+            nn.BatchNorm2d(32),
             nn.ReLU()
         )
         self.conv_tran3 = nn.Sequential(
