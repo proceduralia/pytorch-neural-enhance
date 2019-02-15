@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_utils import conv_out_shape, same_padding
 from torchvision.models import vgg16_bn
+from semseg.models.models import SemSegNet
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
@@ -209,7 +210,7 @@ class ConditionalCAN(nn.Module):
         x = self.last_blocks(x)
         return x
 
-class SemanticCAN(nn.Module):
+class SandOCAN(nn.Module):
     """Context Aggregation Network that can be conditioned by semantic segmentation information.
     Conditioning with conditional batch normalization 
     
@@ -224,6 +225,7 @@ class SemanticCAN(nn.Module):
     """
     def __init__(self, n_channels=32, n_classes=150, emb_dim=64, n_middle_blocks=5, adaptive=False):
         super().__init__()
+        self.sem_net = SemSegNet()
         self.bn = AdaptiveBatchNorm2d if adaptive else nn.BatchNorm2d
         self.first_block = nn.Sequential(
             nn.Conv2d(3, n_channels, kernel_size=3, padding=same_padding(3, 1)),
@@ -254,7 +256,8 @@ class SemanticCAN(nn.Module):
             nn.Conv2d(n_channels, 3, kernel_size=1)
         )
 
-    def forward(self, x, maps):
+    def forward(self, x):
+        maps = self.sem_net(x)
         x = self.first_block(x)
         #Semantic embedding is computed only once for all layers
         emb = self.downsampling_net(maps)
@@ -410,8 +413,7 @@ if __name__ == "__main__":
     c_can32 = ConditionalCAN(nums_classes)
     assert c_can32(im, class_idxs).size() == im.size()
     
-    #Tests for integration of semantic segmentation
-    sem = torch.randn(8, 150, 60, 80)
-    s_can32 = SemanticCAN()
-    assert s_can32(im, sem).size() == im.size()
+    sandocan32 = SandOCAN()
+    assert sandocan32(im).size() == im.size()
+
     print("Tests run correctly!")
