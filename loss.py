@@ -3,17 +3,21 @@ from models import VGG
 import torch
 import torch.nn as nn
 from nima.inference.inference_model import InferenceModel
-
+from ssim import SSIM
 class ColorContentLoss(nn.Module):
     def __init__(self,device):
         super(ColorContentLoss, self).__init__()
-        self.vgg = VGG(device)
-        self.vgg = self.vgg.to(device)
+        #self.vgg = VGG(device)
+        #self.vgg = self.vgg.to(device)
         self.smoothing = GaussianSmoothing(3,10,5)
         self.smoothing = self.smoothing.to(device)
+        self.ssim = SSIM()
+        self.w1 = 0.00001
+        self.fidelity = nn.L1Loss().to(device)
         
     def __call__(self,original_img,target_img):
-        return self.color_loss(original_img,target_img) + self.content_loss(original_img,target_img) #+ self.tv_loss(original_img,target_img)
+        #return self.color_loss(original_img,target_img) + self.content_loss(original_img,target_img) #+ self.tv_loss(original_img,target_img)
+        return self.fidelity(original_img,target_img) + (1-self.ssim(original_img,target_img))
         
     def content_loss(self,original_img,target_img):
         _, c1, h1, w1 = original_img.size()
@@ -45,7 +49,7 @@ class NimaLoss(nn.Module):
     def __init__(self,device,gamma):
         super(NimaLoss,self).__init__()
         self.model = InferenceModel(device)
-        self.fidelity = nn.SmoothL1Loss()
+        self.fidelity = nn.MSELoss()
         self.fidelity = self.fidelity.to(device)
         self.gamma = gamma
 

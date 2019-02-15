@@ -24,10 +24,11 @@ parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--cuda_idx', type=int, default=1, help='cuda device id')
 parser.add_argument('--outf', default='.', help='folder for model checkpoints')
 parser.add_argument('--manual_seed', type=int, help='manual seed')
-parser.add_argument('--logdir', default='log', help='logdir for tensorboard')
+parser.add_argument('--logdir', default='log_histeq', help='logdir for tensorboard')
 parser.add_argument('--run_tag', default='', help='tags for the current run')
 parser.add_argument('--checkpoint_every', default=10, help='number of epochs after which saving checkpoints')
 parser.add_argument('--model_type', default='unet', choices=['unet', 'cnn', 'mlp'], help='type of model to use')
+parser.add_argument('--loss', default='mse', choices=['mse','mae'], help='type of loss to use')
 parser.add_argument('--initial_1by1', action="store_true", help='whether to use the initial 1 by 1 convs in unet')
 parser.add_argument('--transform', default='ad_hist_eq', choices=['hist_eq','ad_hist_eq','unsharp'], help='transformation to be learned')
 opt = parser.parse_args()
@@ -72,7 +73,12 @@ if opt.model_type == 'mlp':
 assert model
 
 model = model.to(device)
-criterion = nn.MSELoss().to(device)
+if opt.loss == "mse":
+  criterion = nn.MSELoss()
+if opt.loss == "mae":
+  criterion = nn.L1Loss()
+
+criterion = criterion.to(device)
 optimizer = optim.Adam(model.parameters(), lr=opt.lr)
 
 for epoch in range(opt.epochs):

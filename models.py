@@ -404,7 +404,7 @@ if __name__ == "__main__":
     #Test can32 forward
     assert can32(im).size() == im.size()
     
-    feat = torch.randn(1, 32, 60, 80)
+    feat = torch.randn(1, 32, 300, 500)
     class_idxs = (torch.LongTensor([1]), torch.LongTensor([0]), torch.LongTensor([0]), torch.LongTensor([1]))
     nums_classes = (6, 3, 3, 4)
     cbn = MultipleConditionalBatchNorm2d(n_channels=32, nums_classes=nums_classes)
@@ -415,5 +415,4 @@ if __name__ == "__main__":
     
     sandocan32 = SandOCAN()
     assert sandocan32(im).size() == im.size()
-
     print("Tests run correctly!")

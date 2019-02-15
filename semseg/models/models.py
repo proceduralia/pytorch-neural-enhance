@@ -584,9 +584,10 @@ class UPerNet(nn.Module):
 
         return x
 
-class SemSegNet:
+class SemSegNet(nn.Module):
     """Semantic segmentation wrapper to be used for inference"""
     def __init__(self, model_path='baseline-resnet50dilated-ppm_deepsup'):
+        super().__init__()
         builder = ModelBuilder()
         net_encoder = builder.build_encoder(
             arch="resnet50dilated",
@@ -606,7 +607,7 @@ class SemSegNet:
         self.segmentation_module.eval()
         self.mean=[102.9801, 115.9465, 122.7717]
 
-    def __call__(self, x):
+    def forward(self, x):
         #Convert tensor into needed representation
         #In theory one can include the rescaled version of x and iterate
         #expect data normalized in [-1,1]. Denormalize the data to [0,255], then transform
@@ -617,6 +618,3 @@ class SemSegNet:
         x[:, 2, :, :] = x[:, 2, :, :] - self.mean[2] 
         feed_dict = {'img_data':x}
         return self.segmentation_module(feed_dict, segSize=(x.size(2), x.size(3)))
-
-    def __str__(self):
-      return str(self.segmentation_module)

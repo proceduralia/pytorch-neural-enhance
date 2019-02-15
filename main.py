@@ -16,7 +16,7 @@ from loss import ColorContentLoss, NimaLoss
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=8, help='input batch size')
-parser.add_argument('--epochs', type=int, default=50, help='number of epochs to train for')
+parser.add_argument('--epochs', type=int, default=52, help='number of epochs to train for')
 parser.add_argument('--lr', type=float, default=2e-4, help='learning rate')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--cuda_idx', type=int, default=1, help='cuda device id')
@@ -121,7 +121,7 @@ for epoch in range(opt.epochs):
     #Evaluate 
     writer.add_scalar('Train Error', cumulative_loss / len(train_loader), epoch)
     #Checkpointing
-    if epoch % opt.checkpoint_every == 0:
+    if (epoch+1) % opt.checkpoint_every == 0:
         torch.save(model.state_dict(), os.path.join(opt.checkpoint_dir, "{}_epoch{}.pt".format(opt.run_tag, epoch+1)))
     
     #Model evaluation
@@ -142,3 +142,5 @@ for epoch in range(opt.epochs):
       images = torch.cat((original, estimated, actual))
       grid = make_grid(images, nrow=1, normalize=True, range=(-1,1))
       writer.add_image('{}:Original|Estimated|Actual'.format(idx), grid, epoch)
+
+torch.save(model.state_dict(), os.path.join(opt.checkpoint_dir, "{}_final.pt".format(opt.run_tag)))
