@@ -4,6 +4,42 @@ import torch.nn.functional as F
 from torch_utils import conv_out_shape, same_padding
 from torchvision.models import vgg16_bn
 
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        
+    def forward(self, x):
+        residual = x
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out += residual
+        out = self.relu(out)
+        return out
+
+class ContinuousConditionalBatchNorm2d(nn.Module):
+    def __init__(self, n_channels, input_dim):
+        super().__init__()
+        self.n_channels = n_channels
+        #BatchNorm with affine=False is just normalization without params
+        self.bn = nn.BatchNorm2d(n_channels, affine=False)
+        #Map continuous condition to required size
+        self.linear = nn.Linear(input_dim, n_channels*2)
+
+    def forward(self, x, y):
+        out = self.bn(x)
+        gamma, beta = self.linear(y).chunk(2, 1)
+        out = gamma.view(-1, self.n_channels, 1, 1) * out + beta.view(-1, self.n_channels, 1, 1)
+        return out
+
+
 class ConditionalBatchNorm2d(nn.Module):
     def __init__(self, n_channels, num_classes):
         super().__init__()
@@ -139,7 +175,7 @@ class ConditionalCAN(nn.Module):
     
     Expected input: (image, (class_idx1,class_idx2,...)).
     """
-    def __init__(self, nums_classes, n_channels=32, n_middle_blocks=5, adaptive=False):
+    def __init__(self, nums_classes=(6,3,3,4), n_channels=32, n_middle_blocks=5, adaptive=False):
         super().__init__()
         self.bn = AdaptiveBatchNorm2d if adaptive else nn.BatchNorm2d
         self.first_block = nn.Sequential(
@@ -157,7 +193,6 @@ class ConditionalCAN(nn.Module):
             MultipleConditionalBatchNorm2d(n_channels, nums_classes, adaptive=adaptive)
             for i in range(1, n_middle_blocks+1)
         ])
-
         self.last_blocks = nn.Sequential(
             nn.Conv2d(n_channels, n_channels, kernel_size=3, padding=same_padding(3, 1)),
             self.bn(n_channels),
@@ -174,6 +209,62 @@ class ConditionalCAN(nn.Module):
         x = self.last_blocks(x)
         return x
 
+class SemanticCAN(nn.Module):
+    """Context Aggregation Network that can be conditioned by semantic segmentation information.
+    Conditioning with conditional batch normalization 
+    
+    Expected input: (image, semantic_map).
+
+    Args:
+    - n_channels (int): number of channels for the internal convolutions
+    - n_classes (int): number of semantic classes
+    - emb_dim (int): dimensionality of the semantic embedding
+    - n_middle blocks (int): number of middle blocks at the center of the can network
+    - adaptive (bool): whether to use adaptive batch normalization or not
+    """
+    def __init__(self, n_channels=32, n_classes=150, emb_dim=64, n_middle_blocks=5, adaptive=False):
+        super().__init__()
+        self.bn = AdaptiveBatchNorm2d if adaptive else nn.BatchNorm2d
+        self.first_block = nn.Sequential(
+            nn.Conv2d(3, n_channels, kernel_size=3, padding=same_padding(3, 1)),
+            self.bn(n_channels),
+            nn.LeakyReLU(0.2),
+        )
+        
+        #Layers from 2 to 8
+        self.middle_convs = nn.ModuleList([
+            nn.Conv2d(n_channels, n_channels, kernel_size=3, dilation=2**i, padding=same_padding(3, 2**i))
+            for i in range(1, n_middle_blocks+1)
+        ])
+        self.middle_cbns = nn.ModuleList([
+            ContinuousConditionalBatchNorm2d(n_channels, emb_dim)
+            for i in range(1, n_middle_blocks+1)
+        ])
+        
+        self.downsampling_net = nn.Sequential(*(
+            [nn.Conv2d(n_classes, emb_dim, 1), nn.LeakyReLU(0.2)] + \
+            [ResidualBlock(emb_dim, emb_dim) for i in range(3)] + \
+            [nn.AdaptiveAvgPool2d((1, 1))]
+        ))
+ 
+        self.last_blocks = nn.Sequential(
+            nn.Conv2d(n_channels, n_channels, kernel_size=3, padding=same_padding(3, 1)),
+            self.bn(n_channels),
+            nn.LeakyReLU(0.2),
+            nn.Conv2d(n_channels, 3, kernel_size=1)
+        )
+
+    def forward(self, x, maps):
+        x = self.first_block(x)
+        #Semantic embedding is computed only once for all layers
+        emb = self.downsampling_net(maps)
+        emb = emb.view(-1, emb.size(1))
+        for conv, cbn in zip(self.middle_convs, self.middle_cbns):
+            x = conv(x)
+            x = cbn(x, emb)
+            x = nn.functional.leaky_relu(x, 0.2)
+        x = self.last_blocks(x)
+        return x
 
 class UNet(nn.Module):
     #TODO
@@ -317,6 +408,10 @@ if __name__ == "__main__":
     assert cbn(feat, class_idxs).size() == feat.size()
     
     c_can32 = ConditionalCAN(nums_classes)
-    #assert c_can32(im, class_idxs).size() == im.size()
-
+    assert c_can32(im, class_idxs).size() == im.size()
+    
+    #Tests for integration of semantic segmentation
+    sem = torch.randn(8, 150, 60, 80)
+    s_can32 = SemanticCAN()
+    assert s_can32(im, sem).size() == im.size()
     print("Tests run correctly!")
