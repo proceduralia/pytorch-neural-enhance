@@ -10,12 +10,13 @@ import datetime
 import os
 import random
 from datasets import FivekDataset
-from models import CAN
+from models import CAN, SandOCAN
 from torch_utils import JoinedDataLoader
+from loss import ColorContentLoss, NimaLoss
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=8, help='input batch size')
-parser.add_argument('--epochs', type=int, default=100, help='number of epochs to train for')
+parser.add_argument('--epochs', type=int, default=50, help='number of epochs to train for')
 parser.add_argument('--lr', type=float, default=2e-4, help='learning rate')
 parser.add_argument('--cuda', action='store_true', help='enables cuda')
 parser.add_argument('--cuda_idx', type=int, default=1, help='cuda device id')
@@ -24,7 +25,9 @@ parser.add_argument('--logdir', default='log', help='logdir for tensorboard')
 parser.add_argument('--run_tag', default='', help='tags for the current run')
 parser.add_argument('--checkpoint_every', default=10, help='number of epochs after which saving checkpoints')
 parser.add_argument('--checkpoint_dir', default="checkpoints", help='directory for the checkpoints')
-parser.add_argument('--model_type', default='can32', choices=['can32'], help='type of model to use')
+parser.add_argument('--model_type', default='can32', choices=['can32', 'sandocan32'], help='type of model to use')
+parser.add_argument('--loss', default='mse', choices=['mse','mae','nima','clc'], help='loss to be used')
+parser.add_argument('--gamma', default=0.001, type=float, help='gamma to be used only in case of Nima Loss')
 parser.add_argument('--data_path', default='/home/iacv3_1/fivek', help='path of the base directory of the dataset')
 opt = parser.parse_args()
 
@@ -81,10 +84,22 @@ test_loader = JoinedDataLoader(test_landscape_loader, test_portrait_loader)
 
 if opt.model_type == 'can32':
   model = CAN(n_channels=32)
+if opt.model_type == 'sandocan32':
+  model = SandOCAN()
 assert model
-
 model = model.to(device)
-criterion = nn.MSELoss().to(device)
+
+if opt.loss == "mse":
+  criterion = nn.MSELoss()
+if opt.loss == "mae":
+  criterion = nn.L1Loss()
+if opt.loss == "nima":
+  criterion = NimaLoss(device,opt.gamma)
+if opt.loss == "clc":
+  criterion = ColorContentLoss(device)
+assert criterion
+criterion = criterion.to(device)
+
 optimizer = optim.Adam(model.parameters(), lr=opt.lr)
 
 #Select random idxs for displaying
@@ -104,7 +119,7 @@ for epoch in range(opt.epochs):
         print('[Epoch %d, Batch %2d] loss: %.3f' %
          (epoch + 1, i + 1, cumulative_loss / (i+1)), end="\r")
     #Evaluate 
-    writer.add_scalar('MSE Train', cumulative_loss / len(train_loader), epoch)
+    writer.add_scalar('Train Error', cumulative_loss / len(train_loader), epoch)
     #Checkpointing
     if epoch % opt.checkpoint_every == 0:
         torch.save(model.state_dict(), os.path.join(opt.checkpoint_dir, "{}_epoch{}.pt".format(opt.run_tag, epoch+1)))
@@ -118,12 +133,12 @@ for epoch in range(opt.epochs):
         output = model(im_o)
         test_loss.append(criterion(output, im_t).item())
     avg_loss = sum(test_loss)/len(test_loss)
-    writer.add_scalar('MSE Test', avg_loss, epoch)
+    writer.add_scalar('Test Error', avg_loss, epoch)
     
     for idx in test_idxs:
       original, actual = test_landscape_dataset[idx]
       original, actual = original.unsqueeze(0).to(device), actual.unsqueeze(0).to(device)
       estimated = model(original)
       images = torch.cat((original, estimated, actual))
-      grid = make_grid(images, nrow=1, normalize=True)
+      grid = make_grid(images, nrow=1, normalize=True, range=(-1,1))
       writer.add_image('{}:Original|Estimated|Actual'.format(idx), grid, epoch)
