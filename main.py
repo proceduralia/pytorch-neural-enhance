@@ -10,8 +10,8 @@ import datetime
 import os
 import random
 from datasets import FivekDataset
-from models import CAN, SandOCAN
-from torch_utils import JoinedDataLoader
+from models import CAN, SandOCAN, UNet
+from torch_utils import JoinedDataLoader, load_model
 from loss import ColorContentLoss, NimaLoss
 
 parser = argparse.ArgumentParser()
@@ -25,7 +25,9 @@ parser.add_argument('--logdir', default='log', help='logdir for tensorboard')
 parser.add_argument('--run_tag', default='', help='tags for the current run')
 parser.add_argument('--checkpoint_every', default=10, help='number of epochs after which saving checkpoints')
 parser.add_argument('--checkpoint_dir', default="checkpoints", help='directory for the checkpoints')
-parser.add_argument('--model_type', default='can32', choices=['can32', 'sandocan32'], help='type of model to use')
+parser.add_argument('--final_dir', default="final_models", help='directory for the final_models')
+parser.add_argument('--model_type', default='can32', choices=['can32', 'sandocan32','unet'], help='type of model to use')
+parser.add_argument('--load_model', action='store_true', help='enables load from latest checkpoint')
 parser.add_argument('--loss', default='mse', choices=['mse','mae','nima','clc'], help='loss to be used')
 parser.add_argument('--gamma', default=0.001, type=float, help='gamma to be used only in case of Nima Loss')
 parser.add_argument('--data_path', default='/home/iacv3_1/fivek', help='path of the base directory of the dataset')
@@ -44,6 +46,7 @@ if opt.manual_seed is None:
 print("Random Seed: ", opt.manual_seed)
 random.seed(opt.manual_seed)
 torch.manual_seed(opt.manual_seed)
+start_epoch = 0
 
 os.makedirs(opt.checkpoint_dir, exist_ok=True)
 
@@ -86,7 +89,12 @@ if opt.model_type == 'can32':
   model = CAN(n_channels=32)
 if opt.model_type == 'sandocan32':
   model = SandOCAN()
+if opt.model_type == 'unet':
+  model = UNet()
 assert model
+
+if opt.load_model:
+  model, start_epoch = load_model(model, opt.checkpoint_dir, opt.run_tag)
 model = model.to(device)
 
 if opt.loss == "mse":
@@ -104,7 +112,7 @@ optimizer = optim.Adam(model.parameters(), lr=opt.lr)
 
 #Select random idxs for displaying
 test_idxs = random.sample(range(len(test_landscape_dataset)), 3)
-for epoch in range(opt.epochs):
+for epoch in range(start_epoch, opt.epochs):
     model.train()
     cumulative_loss = 0.0
     for i, (im_o, im_t) in enumerate(train_loader):
@@ -132,7 +140,7 @@ for epoch in range(opt.epochs):
       with torch.no_grad():
         output = model(im_o)
         test_loss.append(criterion(output, im_t).item())
-    avg_loss = sum(test_loss)/len(test_loss)
+        avg_loss = sum(test_loss)/len(test_loss)
     writer.add_scalar('Test Error', avg_loss, epoch)
     
     for idx in test_idxs:
@@ -143,4 +151,6 @@ for epoch in range(opt.epochs):
       grid = make_grid(images, nrow=1, normalize=True, range=(-1,1))
       writer.add_image('{}:Original|Estimated|Actual'.format(idx), grid, epoch)
 
-torch.save(model.state_dict(), os.path.join(opt.checkpoint_dir, "{}_final.pt".format(opt.run_tag)))
+print("Training completed succesfully")
+
+torch.save(model.state_dict(), os.path.join(opt.final_dir, "{}_final.pt".format(opt.run_tag)))

@@ -226,6 +226,9 @@ class SandOCAN(nn.Module):
     def __init__(self, n_channels=32, n_classes=150, emb_dim=64, n_middle_blocks=5, adaptive=False):
         super().__init__()
         self.sem_net = SemSegNet()
+        #Set no gradients for the pretrained model
+        for param in self.sem_net.parameters():
+            param.requires_grad=True
         self.bn = AdaptiveBatchNorm2d if adaptive else nn.BatchNorm2d
         self.first_block = nn.Sequential(
             nn.Conv2d(3, n_channels, kernel_size=3, padding=same_padding(3, 1)),
@@ -270,15 +273,79 @@ class SandOCAN(nn.Module):
         return x
 
 class UNet(nn.Module):
-    #TODO
     """
       Standard Unet
     """
     def __init__(self):
         super().__init__()
+        self.inc = unet_block(3,64,False)
+        self.down1 = unet_block(64,128)
+        self.down2 = unet_block(128,256)
+        self.down3 = unet_block(256,512)
+        self.down4 = unet_block(512,512)
+        self.up1 = unet_up(1024,256)
+        self.up2 = unet_up(512,128)
+        self.up3 = unet_up(256,64)
+        self.up4 = unet_up(128,64)
+        self.outc = nn.Conv2d(64,3,1)
     
     def forward(self, x):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x = self.up1(x5, x4)
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+        x = self.outc(x)
         return x
+
+class unet_block(nn.Module):
+    '''(conv => BN => ReLU) * 2'''
+    def __init__(self,in_ch,out_ch,down=True):
+        super(unet_block,self).__init__()
+        self.down = down
+        self.pool = nn.MaxPool2d(2)
+        self.block = nn.Sequential(
+                    nn.Conv2d(in_ch, out_ch, 3, padding=1),
+                    nn.BatchNorm2d(out_ch),
+                    nn.ReLU(inplace=True),
+                    nn.Conv2d(out_ch, out_ch, 3, padding=1),
+                    nn.BatchNorm2d(out_ch),
+                    nn.ReLU(inplace=True) )
+
+    def forward(self,x):
+        if self.down:
+            x = self.pool(x)
+        x = self.block(x)
+        return x
+
+class unet_up(nn.Module):
+    def __init__(self,in_ch,out_ch,bilinear=True):
+        super(unet_up, self).__init__()
+        if bilinear:
+            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        else:
+            self.up = nn.Conv2dTranspose(in_ch//2,out_ch//2,2,stride=2)
+
+        self.conv = unet_block(in_ch,out_ch,False)
+    
+    def forward(self,x1,x2):
+        x1 = self.up(x1)
+        
+        diffY = x2.size()[2] - x1.size()[2]
+        diffX = x2.size()[3] - x1.size()[3]
+
+        x1 = F.pad(x1, (diffX // 2, diffX - diffX//2,
+                        diffY // 2, diffY - diffY//2))
+
+        x = torch.cat([x2, x1], dim=1)
+        x = self.conv(x)
+        return x        
+
+
 
 class NaiveCNN(nn.Module):
     """
@@ -415,4 +482,8 @@ if __name__ == "__main__":
     
     sandocan32 = SandOCAN()
     assert sandocan32(im).size() == im.size()
+    
+    im = torch.randn(1, 3, 300, 500)
+    unet = UNet()
+    assert unet(im).size() == im.size()
     print("Tests run correctly!")

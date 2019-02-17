@@ -25,6 +25,7 @@ parser.add_argument('--logdir', default='log', help='logdir for tensorboard')
 parser.add_argument('--run_tag', default='', help='tags for the current run')
 parser.add_argument('--checkpoint_every', default=10, help='number of epochs after which saving checkpoints')
 parser.add_argument('--checkpoint_dir', default="checkpoints", help='directory for the checkpoints')
+parser.add_argument('--final_dir', default="final_models", help='directory for the final models')
 parser.add_argument('--model_type', default='can32', choices=['can32'], help='type of model to use')
 parser.add_argument('--loss', default='mse', choices=['mse','mae','nima','clc'], help='loss to be used')
 parser.add_argument('--gamma', default=0.001, type=float, help='gamma to be used only in case of Nima Loss')
@@ -144,5 +145,5 @@ for epoch in range(opt.epochs):
       grid = make_grid(images, nrow=1, normalize=True, range=(-1,1))
       writer.add_image('{}:Original|Estimated|Actual'.format(idx), grid, epoch)
 
-
-torch.save(model.state_dict(), os.path.join(opt.checkpoint_dir, "{}_final.pt".format(opt.run_tag)))
+print("Training Finished")
+torch.save(model.state_dict(), os.path.join(opt.final_dir, "{}_final.pt".format(opt.run_tag)))

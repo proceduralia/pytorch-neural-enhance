@@ -16,7 +16,7 @@ class ColorContentLoss(nn.Module):
         self.fidelity = nn.L1Loss().to(device)
         
     def __call__(self,original_img,target_img):
-        #return self.color_loss(original_img,target_img) + self.content_loss(original_img,target_img) #+ self.tv_loss(original_img,target_img)
+        #return self.w1*self.color_loss(original_img,target_img) + (1-self.ssim(original_img,target_img)) #+ self.tv_loss(original_img,target_img)
         return self.fidelity(original_img,target_img) + (1-self.ssim(original_img,target_img))
         
     def content_loss(self,original_img,target_img):

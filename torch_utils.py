@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+import os
+import re
 
 class JoinedDataLoader:
     """Loader for sampling from multiple loaders with probability proportional to their length. Stops when all loaders are exausthed.
@@ -78,3 +80,11 @@ def same_padding(k, d=1, dims=2):
     
     return tuple([int(0.5*(d[j]*(k[j]-1))) for j in range(dims)])
 
+def load_model(model,model_dir,run_tag):
+    epoch = 0
+    check = [f for f in os.listdir(model_dir) if f.startswith(run_tag)]
+    if len(check)>0:
+      epoch = max([int(re.findall('epoch\d+',c)[0][5:]) for c in check])
+      model.load_state_dict(torch.load(os.path.join(model_dir,run_tag+'_epoch'+str(epoch)+'.pt')))
+      print("Resuming trainig from epoch %d" % epoch)
+    return model, epoch
