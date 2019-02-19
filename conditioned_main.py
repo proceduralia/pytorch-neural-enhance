@@ -27,7 +27,7 @@ parser.add_argument('--checkpoint_every', default=10, help='number of epochs aft
 parser.add_argument('--checkpoint_dir', default="checkpoints", help='directory for the checkpoints')
 parser.add_argument('--final_dir', default="final_models", help='directory for the final models')
 parser.add_argument('--model_type', default='can32', choices=['can32'], help='type of model to use')
-parser.add_argument('--loss', default='mse', choices=['mse','mae','nima','clc'], help='loss to be used')
+parser.add_argument('--loss', default='mse', choices=['mse','mae','l1nima','l2nima','l1ssim','colorssim'], help='loss to be used')
 parser.add_argument('--gamma', default=0.001, type=float, help='gamma to be used only in case of Nima Loss')
 parser.add_argument('--data_path', default='/home/iacv3_1/fivek', help='path of the base directory of the dataset')
 opt = parser.parse_args()
@@ -92,10 +92,14 @@ if opt.loss == "mse":
   criterion = nn.MSELoss()
 if opt.loss == "mae":
   criterion = nn.L1Loss()
-if opt.loss == "nima":
-  criterion = NimaLoss(device,opt.gamma)
-if opt.loss == "clc":
-  criterion = ColorContentLoss(device)
+if opt.loss == "l1nima":
+  criterion = NimaLoss(device,opt.gamma,nn.L1Loss())
+if opt.loss == "l2nima":
+  criterion = NimaLoss(device,opt.gamma,nn.MSELoss())
+if opt.loss == "l1ssim":
+  criterion = ColorSSIM(device,'l1')
+if opt.loss == "colorssim":
+  criterion = ColorSSIM(device)
 assert criterion
 criterion = criterion.to(device)
 
@@ -110,7 +114,7 @@ for epoch in range(opt.epochs):
         im_o, im_t = im_o.to(device), im_t.to(device)
         feats = [f.to(device) for f in feats]
         optimizer.zero_grad()
-        
+
         output = model(im_o, feats)
         loss = criterion(output, im_t)
         loss.backward()
@@ -118,16 +122,16 @@ for epoch in range(opt.epochs):
         cumulative_loss += loss.item()
         print('[Epoch %d, Batch %2d] loss: %.3f' %
          (epoch + 1, i + 1, cumulative_loss / (i+1)), end="\r")
-    #Evaluate 
+    #Evaluate
     writer.add_scalar('Train Error', cumulative_loss / len(train_loader), epoch)
     #Checkpointing
     if (epoch+1) % opt.checkpoint_every == 0:
         torch.save(model.state_dict(), os.path.join(opt.checkpoint_dir, "{}_epoch{}.pt".format(opt.run_tag, epoch+1)))
-    
+
     #Model evaluation
-    model.eval() 
+    model.eval()
     test_loss = []
-    for i, (im_o, im_t, feats) in enumerate(test_loader): 
+    for i, (im_o, im_t, feats) in enumerate(test_loader):
       im_o, im_t = im_o.to(device), im_t.to(device)
       feats = [f.to(device) for f in feats]
       with torch.no_grad():
@@ -135,7 +139,7 @@ for epoch in range(opt.epochs):
         test_loss.append(criterion(output, im_t).item())
     avg_loss = sum(test_loss)/len(test_loss)
     writer.add_scalar('Test Error', avg_loss, epoch)
-    
+
     for idx in test_idxs:
       original, actual, feats = test_landscape_dataset[idx]
       original, actual = original.unsqueeze(0).to(device), actual.unsqueeze(0).to(device)

@@ -1,32 +1,26 @@
-from gaussian import GaussianSmoothing
-from models import VGG
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
 from nima.inference.inference_model import InferenceModel
 from ssim import SSIM
-class ColorContentLoss(nn.Module):
-    def __init__(self,device):
+import math
+import numbers
+
+class ColorSSIM(nn.Module):
+    def __init__(self,device,fidelity):
         super(ColorContentLoss, self).__init__()
-        #self.vgg = VGG(device)
-        #self.vgg = self.vgg.to(device)
         self.smoothing = GaussianSmoothing(3,10,5)
         self.smoothing = self.smoothing.to(device)
         self.ssim = SSIM()
-        self.w1 = 0.00001
-        self.fidelity = nn.L1Loss().to(device)
-        
+        self.w1 = 1
+        if fidelity=='l1':
+            self.fidelity = nn.L1Loss().to(device)
+        else:
+            self.w1 = 0.00001
+            self.fidelity = self.color_loss
+
     def __call__(self,original_img,target_img):
-        #return self.w1*self.color_loss(original_img,target_img) + (1-self.ssim(original_img,target_img)) #+ self.tv_loss(original_img,target_img)
         return self.fidelity(original_img,target_img) + (1-self.ssim(original_img,target_img))
-        
-    def content_loss(self,original_img,target_img):
-        _, c1, h1, w1 = original_img.size()
-        chw1 = c1 * h1 * w1
-        vgg_original = self.vgg(original_img).detach()
-        vgg_enhanched = self.vgg(target_img)
-        content_loss = 1.0/chw1 * nn.MSELoss()(vgg_enhanched,vgg_original)
-        #print(content_loss)
-        return content_loss
 
     def color_loss(self,original_img,target_img):
         batch_size = original_img.size()[0]
@@ -36,23 +30,86 @@ class ColorContentLoss(nn.Module):
         #print(color_loss)
         return color_loss
 
-
-    def tv_loss(self, enhanced_img, target_img):
-        bsize, chan, height, width = target_img.size()
-        errors = []
-        dt = torch.abs(target_img[:,:,1:,:] - target_img[:,:,:-1,:])
-        de = torch.abs(enhanced_img[:,:,1:,:] - enhanced_img[:,:,:-1,:])
-        error = torch.norm(dt - de, 1)
-        return error / height
-
-class NimaLoss(nn.Module):
-    def __init__(self,device,gamma):
+class L2NimaLoss(nn.Module):
+    def __init__(self,device,gamma,fidelity):
         super(NimaLoss,self).__init__()
         self.model = InferenceModel(device)
-        self.fidelity = nn.MSELoss()
+        self.fidelity = fidelity
         self.fidelity = self.fidelity.to(device)
         self.gamma = gamma
 
-    def forward(self,x,y): 
+    def forward(self,x,y):
         score = self.model.predict(x)
         return self.fidelity(x,y) + self.gamma*(10 - score)
+
+
+class GaussianSmoothing(nn.Module):
+    """
+    Apply gaussian smoothing on a
+    1d, 2d or 3d tensor. Filtering is performed seperately for each channel
+    in the input using a depthwise convolution.
+    Arguments:
+        channels (int, sequence): Number of channels of the input tensors. Output will
+            have this number of channels as well.
+        kernel_size (int, sequence): Size of the gaussian kernel.
+        sigma (float, sequence): Standard deviation of the gaussian kernel.
+        dim (int, optional): The number of dimensions of the data.
+            Default value is 2 (spatial).
+    Example:
+    smoothing = GaussianSmoothing(3, 5, 1)
+    input = torch.rand(1, 3, 100, 100)
+    input = F.pad(input, (2, 2, 2, 2), mode='reflect')
+    output = smoothing(input)
+    """
+    def __init__(self, channels, kernel_size, sigma, dim=2):
+        super(GaussianSmoothing, self).__init__()
+        if isinstance(kernel_size, numbers.Number):
+            kernel_size = [kernel_size] * dim
+        if isinstance(sigma, numbers.Number):
+            sigma = [sigma] * dim
+
+        # The gaussian kernel is the product of the
+        # gaussian function of each dimension.
+        kernel = 1
+        meshgrids = torch.meshgrid(
+            [
+                torch.arange(size, dtype=torch.float32)
+                for size in kernel_size
+            ]
+        )
+        for size, std, mgrid in zip(kernel_size, sigma, meshgrids):
+            mean = (size - 1) / 2
+            kernel *= 1 / (std * math.sqrt(2 * math.pi)) * \
+                      torch.exp(-((mgrid - mean) / (2 * std)) ** 2)
+
+        # Make sure sum of values in gaussian kernel equals 1.
+        kernel = kernel / torch.sum(kernel)
+
+        # Reshape to depthwise convolutional weight
+        kernel = kernel.view(1, 1, *kernel.size())
+        kernel = kernel.repeat(channels, *[1] * (kernel.dim() - 1))
+
+        self.register_buffer('weight', kernel)
+        self.groups = channels
+
+        if dim == 1:
+            self.conv = F.conv1d
+        elif dim == 2:
+            self.conv = F.conv2d
+        elif dim == 3:
+            self.conv = F.conv3d
+        else:
+            raise RuntimeError(
+                'Only 1, 2 and 3 dimensions are supported. Received {}.'.format(dim)
+            )
+
+    def forward(self, x):
+        """
+        Apply gaussian filter to input.
+        Arguments:
+            input (torch.Tensor): Input to apply gaussian filter on.
+        Returns:
+            filtered (torch.Tensor): Filtered output.
+        """
+        x = F.pad(x, (2, 2, 2, 2), mode='reflect')
+        return self.conv(x, weight=self.weight, groups=self.groups)
