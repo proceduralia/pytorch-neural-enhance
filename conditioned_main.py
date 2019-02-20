@@ -10,7 +10,7 @@ import datetime
 import os
 import random
 from datasets import FivekDataset
-from models import ConditionalCAN
+from models import ConditionalCAN, ConditionalUNet
 from torch_utils import JoinedDataLoader
 from loss import ColorContentLoss, NimaLoss
 
@@ -26,7 +26,7 @@ parser.add_argument('--run_tag', default='', help='tags for the current run')
 parser.add_argument('--checkpoint_every', default=10, help='number of epochs after which saving checkpoints')
 parser.add_argument('--checkpoint_dir', default="checkpoints", help='directory for the checkpoints')
 parser.add_argument('--final_dir', default="final_models", help='directory for the final models')
-parser.add_argument('--model_type', default='can32', choices=['can32'], help='type of model to use')
+parser.add_argument('--model_type', default='can32', choices=['can32','unet'], help='type of model to use')
 parser.add_argument('--loss', default='mse', choices=['mse','mae','nima','clc'], help='loss to be used')
 parser.add_argument('--gamma', default=0.001, type=float, help='gamma to be used only in case of Nima Loss')
 parser.add_argument('--data_path', default='/home/iacv3_1/fivek', help='path of the base directory of the dataset')
@@ -85,6 +85,8 @@ test_loader = JoinedDataLoader(test_landscape_loader, test_portrait_loader)
 
 if opt.model_type == 'can32':
   model = ConditionalCAN()
+if opt.model_type == 'unet':
+  model = ConditionalUNet()
 assert model
 model = model.to(device)
 
