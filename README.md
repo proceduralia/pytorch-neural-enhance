@@ -17,3 +17,14 @@ To see all options run:
 ```
 python main.py -h
 ```
+
+To train a model without condition run 
+
+```
+python condition_main.py --model_name unet --loss l1nima
+```
+To see all options run:
+
+```
+python condition_main.py -h
+```
