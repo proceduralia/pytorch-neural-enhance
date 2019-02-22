@@ -5,6 +5,8 @@
 ```
 git clone https://github.com/proceduralia/neural_enhance
 cd neural_enhance
+conda create --name myenv --file requirements.txt
+source activate myenv
 ```
 
 To train a model without conditioning run 
