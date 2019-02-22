@@ -12,3 +12,8 @@ To train a model without conditioning run
 ```
 python main.py --model_name unet --loss l1nima
 ```
+To see all options run:
+
+```
+python main.py -h
+```
