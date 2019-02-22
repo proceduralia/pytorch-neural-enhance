@@ -39,12 +39,12 @@ python conditioned_main.py -h
 ## Evaluation
 To evaluate a model without condition run 
 ```
-python evaluate.py --model_type unet --image_path path/to/image --final_dir path/to/model_folder
+python evaluations.py --model_type unet --image_path path/to/image --final_dir path/to/model_folder
 ```
 To see all options run:
 
 ```
-python evaluate.py -h
+python evaluations.py -h
 ```
 
 
