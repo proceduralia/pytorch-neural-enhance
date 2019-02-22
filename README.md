@@ -10,7 +10,7 @@ cd neural_enhance
 To train a model without conditioning run 
 
 ```
-python main.py --model_name unet --loss l1nima
+python main.py --model_type unet --loss l1nima --data_path path/to/data
 ```
 To see all options run:
 
@@ -21,7 +21,7 @@ python main.py -h
 To train a model without condition run 
 
 ```
-python conditioned_main.py --model_name unet --loss l1nima
+python conditioned_main.py --model_type unet --loss l1nima --data_path path/to/data
 ```
 To see all options run:
 
