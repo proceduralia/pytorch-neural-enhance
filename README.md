@@ -9,6 +9,6 @@ cd neural_enhance
 
 To train a model without conditioning run 
 
-'''
+```
 python main.py --model_name unet --loss l1nima
-'''
+```
