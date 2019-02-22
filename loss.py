@@ -7,8 +7,8 @@ import math
 import numbers
 
 class ColorSSIM(nn.Module):
-    def __init__(self,device,fidelity):
-        super(ColorContentLoss, self).__init__()
+    def __init__(self,device,fidelity=None):
+        super().__init__()
         self.smoothing = GaussianSmoothing(3,10,5)
         self.smoothing = self.smoothing.to(device)
         self.ssim = SSIM()
@@ -19,20 +19,20 @@ class ColorSSIM(nn.Module):
             self.w1 = 0.00001
             self.fidelity = self.color_loss
 
-    def __call__(self,original_img,target_img):
-        return self.fidelity(original_img,target_img) + (1-self.ssim(original_img,target_img))
+
+    def forward(self,original_img,target_img):
+        return self.w1*self.fidelity(original_img,target_img) + (1-self.ssim(original_img,target_img))
 
     def color_loss(self,original_img,target_img):
         batch_size = original_img.size()[0]
         original_blur = self.smoothing(original_img)
         target_blur = self.smoothing(target_img)
         color_loss = torch.sum(torch.pow(target_blur - original_blur,2))/(2*batch_size)
-        #print(color_loss)
         return color_loss
 
-class L2NimaLoss(nn.Module):
+class NimaLoss(nn.Module):
     def __init__(self,device,gamma,fidelity):
-        super(NimaLoss,self).__init__()
+        super().__init__()
         self.model = InferenceModel(device)
         self.fidelity = fidelity
         self.fidelity = self.fidelity.to(device)

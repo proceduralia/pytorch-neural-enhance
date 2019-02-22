@@ -12,7 +12,7 @@ import random
 from datasets import FivekDataset
 from models import ConditionalCAN, ConditionalUNet
 from torch_utils import JoinedDataLoader
-from loss import ColorContentLoss, NimaLoss
+from loss import ColorSSIM, NimaLoss
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=8, help='input batch size')

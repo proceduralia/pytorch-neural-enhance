@@ -346,6 +346,80 @@ class unet_up(nn.Module):
         return x        
 
 
+class ConditionalUNet(nn.Module):
+    """
+      Conditional Unet
+    """
+    def __init__(self, nums_classes=(6,3,3,4)):
+        super().__init__()
+        self.inc = unet_block(3,64,False)
+        self.down1 = unet_block(64,128)
+        self.down2 = unet_block(128,256)
+        self.down3 = unet_block(256,512)
+        self.down4 = unet_block(512,512)
+        self.up1 = cond_unet_up(1024,256, nums_classes=nums_classes)
+        self.up2 = cond_unet_up(512,128, nums_classes=nums_classes)
+        self.up3 = cond_unet_up(256,64, nums_classes=nums_classes)
+        self.up4 = cond_unet_up(128,64, nums_classes=nums_classes)
+        self.outc = nn.Conv2d(64,3,1)
+
+    def forward(self, x, feat):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x = self.up1(x5, x4, feat)
+        x = self.up2(x, x3, feat)
+        x = self.up3(x, x2, feat)
+        x = self.up4(x, x1, feat)
+        x = self.outc(x)
+        return x
+
+class cond_unet_block(nn.Module):
+    '''(conv => BN => ReLU) * 2'''
+    def __init__(self,in_ch,out_ch,down=True, nums_classes=(6,3,3,4)):
+        super().__init__()
+        self.down = down
+        self.pool = nn.MaxPool2d(2)
+        self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1)
+        self.bn1 = MultipleConditionalBatchNorm2d(out_ch, nums_classes)
+        self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1)
+        self.bn2 = MultipleConditionalBatchNorm2d(out_ch, nums_classes)
+
+    def forward(self,x,feat):
+        if self.down:
+            x = self.pool(x)
+        #x = self.block(x)
+        x = self.conv1(x)
+        x = F.relu(self.bn1(x,feat))
+        x = self.conv2(x)
+        x = F.relu(self.bn2(x,feat))
+        return x
+
+class cond_unet_up(nn.Module):
+    def __init__(self,in_ch,out_ch,bilinear=True,nums_classes=(6,3,3,4)):
+        super().__init__()
+        if bilinear:
+            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+        else:
+            self.up = nn.Conv2dTranspose(in_ch//2,out_ch//2,2,stride=2)
+
+        self.conv = cond_unet_block(in_ch,out_ch,False,nums_classes)
+
+    def forward(self,x1,x2,feat):
+        x1 = self.up(x1)
+
+        diffY = x2.size()[2] - x1.size()[2]
+        diffX = x2.size()[3] - x1.size()[3]
+
+        x1 = F.pad(x1, (diffX // 2, diffX - diffX//2,
+                        diffY // 2, diffY - diffY//2))
+
+        x = torch.cat([x2, x1], dim=1)
+        x = self.conv(x,feat)
+        return x
+
 
 class NaiveCNN(nn.Module):
     """
