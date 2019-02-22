@@ -26,7 +26,7 @@ To see all options run:
 python main.py -h
 ```
 
-To train a model without condition run 
+To train a model with condition run 
 
 ```
 python conditioned_main.py --model_type unet --loss l1nima --data_path path/to/data
@@ -48,4 +48,4 @@ python evaluations.py -h
 ```
 
 
-N.B inside the path/to/model_folder there should be a file "*.pth" who's name strats with the model type
+N.B inside the path/to/model_folder there should be a file "*.pth" whose name starts with the model type
