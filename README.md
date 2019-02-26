@@ -6,6 +6,8 @@ The repository contains the code for evaluating CAN32 and UNet models, together 
 
 The models can also be conditioned, by *conditional batch normalization*, on the categorical features contained in the dataset.
 
+---
+
 Written in collaboration with [ennnas](https://github.com/ennnas) for the Computer Vision MSc course at Politecnico di Milano.
 
 ## Installation
