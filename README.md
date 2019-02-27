@@ -10,6 +10,8 @@ The models can also be conditioned, by *conditional batch normalization*, on the
 
 ![ ](https://proceduralia.github.io/assets/flower.png)
 
+In addition, the script *learn transform* performs training for learning Contrast Limited Adaptive Histogram Equalization (CLAHE) on the CIFAR10 dataset, using different architectures.
+
 ---
 
 Written in collaboration with [ennnas](https://github.com/ennnas) for the Computer Vision MSc course at Politecnico di Milano.
