@@ -1,5 +1,5 @@
 # Pytorch Neural Enhance
-![](https://proceduralia.github.io/assets/can.png).
+![ ](https://proceduralia.github.io/assets/can.png).
 
 This repository contains the code for the experiments presented in the technical report [An empirical evaluation of convolutional neural networks for image
 enhancement](https://proceduralia.github.io/assets/IACV_Project.pdf).
@@ -8,6 +8,7 @@ The repository contains the code for evaluating CAN32 and UNet models, together 
 
 The models can also be conditioned, by *conditional batch normalization*, on the categorical features contained in the dataset.
 
+![ ](https://proceduralia.github.io/assets/flower.png).
 ---
 
 Written in collaboration with [ennnas](https://github.com/ennnas) for the Computer Vision MSc course at Politecnico di Milano.
