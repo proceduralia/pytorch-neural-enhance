@@ -1,5 +1,5 @@
 # Pytorch Neural Enhance
-![ ](https://proceduralia.github.io/assets/can.png).
+![ ](https://proceduralia.github.io/assets/can.png)
 
 This repository contains the code for the experiments presented in the technical report [An empirical evaluation of convolutional neural networks for image
 enhancement](https://proceduralia.github.io/assets/IACV_Project.pdf).
