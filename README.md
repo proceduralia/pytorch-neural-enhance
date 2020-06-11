@@ -49,3 +49,16 @@ To evaluate a model (without conditions) run:
 ```
 python evaluations.py --model_type unet --image_path path/to/image --final_dir path/to/model_folder
 ```
+
+## Citation
+If you found this repository or the report useful for your research work, you can cite them:
+```
+@misc{pytorchenhance,
+  author = {Nasca, Ennio and D'Oro, Pierluca},
+  title = {An empirical evaluation of convolutional neural networks for image enhancement},
+  year = {2019},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/proceduralia/pytorch-neural-enhance}},
+}
+```
